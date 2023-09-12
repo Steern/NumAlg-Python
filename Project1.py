@@ -3,9 +3,6 @@ import numpy as np
 import pickle
 import gzip
 
-global test_inputs
-global test_targets
-
 def softmax(x, derivative):
     exps = np.exp(x)
     if derivative == True:
@@ -104,6 +101,9 @@ class feedForwardNN:
         print(f"Epoch: {epoch} \t{stat/len(test_inputs) * 100}%, total found: {stat}")
 
 def main():
+    global test_inputs
+    global test_targets
+
     network = feedForwardNN(784, 30, 10)
 
     with gzip.open("mnist.pkl.gz", 'rb') as f:
