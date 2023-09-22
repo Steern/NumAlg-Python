@@ -32,7 +32,28 @@ class general_opt_method:
         self.update_hessian()
 
     def line_search(self, currentDirection):
-        return self.wolfe(self.function, self.gradient)
+        if (self.inexact == True):
+            return self.wolfe(self.function, self.gradient)
+        alpha = 1
+        tol = 1e-2
+        def phi(alpha):
+            return self.function(self.history[-1]+alpha*currentDirection)
+        def phidot(alpha):
+            return np.matmul(self.gradient(self.history[-1]+alpha*currentDirection).T,currentDirection)
+        def phi_bis(alpha):
+            epsilon = 1e-2
+            return (phidot(alpha + epsilon) - phidot(alpha - epsilon))/(2*epsilon)
+       
+        max_it = 100
+        for i in range(max_it):
+            # Update alpha using Newton method
+            alpha -= phidot(alpha) / phi_bis(alpha)
+            # Check for convergence
+            if (phidot(alpha) < tol):
+                break
+        return alpha    
+        
+
 
     def update_hessian(self):
         raise NotImplementedError("Subclasses must implement this method")
@@ -193,61 +214,74 @@ class classicNewt(general_opt_method,):
 
 class goodBroyden(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
-        super().__init__(problem, initial_guess, tol, max_it)
+        super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        a = np.matmul(np.matmul(gamma.T, self.H), gamma)
-        b = np.matmul((1/a)*np.matmul(np.add(delta, -np.matmul(self.H, gamma)), gamma.T))
-        self.H = np.add(self.H, np.matmul(b, self.H))
+        print(f"delta = {delta}, gamma = {gamma}")
+        a = np.inner(np.matmul(delta.T, self.H), gamma)
+        b1 = np.add(delta, -1*np.matmul(self.H, gamma))
+        b = (1/a)*np.outer(b1, delta.T)
+        print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
+        print(f"Dim b1 = {b1.shape}")
+        self.H = np.add(self.H,np.matmul(b, self.H)).T
+        print(f"H = {self.H}")
         
 class badBroyden(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
-        super().__init__(problem, initial_guess, tol, max_it)
+    def __init__(self, problem, initial_guess, tol, max_it=500, inexact = False):
+        super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        self.H = np.add(self.H, (1/np.matmul(gamma.T, gamma))*np.matmul(np.add(delta, -np.matmul(self.H, gamma)), gamma.T))
+        print(f"delta = {delta}, gamma = {gamma}")
+        a = np.inner(gamma.T, gamma)
+        b1 = np.add(delta, -1*np.matmul(self.H, gamma))
+        b = (1/a)*np.outer(b1, gamma.T)
+        print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
+        print(f"Dim b1 = {b1.shape}")
+        self.H = np.add(self.H, b).T
+        print(f"H = {self.H}")
 
 class symmetricBroyden(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
-        super().__init__(problem, initial_guess, tol, max_it)
+        super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        u = gamma - np.matmul(self.H*gamma)
-        a = 1/(np.matmul(u.T, gamma))
-        self.H = np.add(self.H, a*np.matmul(u, u.T))
+        u = np.add(delta, -np.matmul(self.H,gamma))
+        a = 1/(np.inner(u.T, gamma))
+        self.H = np.add(self.H, a*np.outer(u, u.T)).T
 
 class DFP(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
-        super().__init__(problem, initial_guess, tol, max_it)
+        super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        a = 1/(np.matmul(delta.T, gamma))*np.matmul(delta, delta.T)
+        a = (1/(np.inner(delta.T, gamma)))*np.outer(delta, delta.T)
         b1 = np.matmul(self.H,gamma)
         b2 = np.matmul(gamma.T, self.H)
-        b3 = np.matmul(gamma.T, np.matmul(self.H, gamma))
-        self.H = np.add(self.H, np.add(a, (-1/b3)*np.matmul(b1,b2)))
+        b4 = np.outer(b1, b2)
+        b3 = np.inner(gamma.T, np.matmul(self.H, gamma))
+        self.H = np.add(self.H, np.add(a, -b4/b3)).T
 
 class BFGS(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
-        super().__init__(problem, initial_guess, tol, max_it)
+        super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        a1 =  np.matmul(gamma.T, np.matmul(self.H, gamma))
-        a2 = (1 + a1/(np.matmul(delta.T, gamma)))
-        a3 = np.matmul(delta, delta.T) / (np.matmul(delta.T, gamma))
-        a = a1*a3
-        b1 = np.matmul(delta, np.matmul(gamma.T, self.H))
-        b2 = np.matmul(self.H, np.matmul(gamma, delta.T))
+        a1 = np.inner(np.matmul(gamma.T, self.H), gamma)
+        a2 = (1 + a1/(np.inner(delta.T, gamma)))
+        a3 = np.outer(delta, delta.T) / (np.inner(delta.T, gamma))
+        a = a2*a3
+        b1 = np.outer(delta, np.matmul(gamma.T, self.H))
+        b2 = np.matmul(self.H, np.outer(gamma, delta.T))
         b3 = np.add(b1, b2)
-        b = b3 / np.matmul(delta.T, delta)
-        self.H = np.add(self.H, np.add(a, -b))
+        b = b3 / np.inner(delta.T, gamma)
+        self.H = np.add(self.H, np.add(a, -b)).T

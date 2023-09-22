@@ -20,16 +20,16 @@ def gf1(x):
 
 prob1 = opt_problem.opt_problem(f1, gf1)
 
-#solver = opt_method.classicNewt(prob1, [0,-0.4], 1e-6, inexact = True)
-#solver.optimize()
+# solver = opt_method.classicNewt(prob1, [-10,3], 1e-6, inexact = True)
+# solver.optimize()
 
-solver2 = opt_method.badBroyden(prob1, [0,-0.4], 1e-6, inexact = True)
-solver2.optimize()
+solver = opt_method.DFP(prob1, [3,-10], 1e-4, inexact = True)
+solver.optimize()
 
 
 # Create data for the contour plot
-x = np.linspace(-0.5, 2.0, 1000)  # X-axis values
-y = np.linspace(-1.5, 4, 1000)  # Y-axis values
+x = np.linspace(-2, 2, 1000)  # X-axis values
+y = np.linspace(-2, 2, 1000)  # Y-axis values
 X, Y = np.meshgrid(x, y)     # Create a grid of X and Y values
 Z = 100*(Y - X**2)**2 + (1 - X)**2     # Z-values (example function, you can replace it with your own)
 
