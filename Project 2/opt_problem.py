@@ -8,7 +8,5 @@ class opt_problem:
         else:
             self.gradient = self.calc_grad(function)
         
-        
-
     def calc_grad(function):
         return np.gradient(function)

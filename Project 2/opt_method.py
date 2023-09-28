@@ -2,12 +2,13 @@ import numpy as np
 import opt_problem
 
 class general_opt_method:
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=1000, inexact = False):
         self.problem = problem
         self.function = problem.function
         self.gradient = problem.gradient
         self.history = [np.array(initial_guess)]
         self.H = np.identity(len(initial_guess))
+        self.G = np.identity(len(initial_guess))
         self.tol = tol
         self.max_it = max_it
         self.inexact = inexact
@@ -18,15 +19,15 @@ class general_opt_method:
     def update_guess(self):
         # Calculate new guess
         currentDirection = self.direction()
-        print(f"direction: {self.line_search(currentDirection)*currentDirection}")
-        print(f"history: {self.history[-1]}")
+      #  print(f"direction: {self.line_search(currentDirection)*currentDirection}")
+     #   print(f"history: {self.history[-1]}")
         
         self.history.append(
             np.add(self.history[-1], self.line_search(currentDirection)*currentDirection)
         )
 
-        print(f"Current guess: {self.history[-1]}")
-        print(f"Direction: {currentDirection}")
+      #  print(f"Current guess: {self.history[-1]}")
+      #  print(f"Direction: {currentDirection}")
 
         # Update inverse Hessian guess (H)
         self.update_hessian()
@@ -34,8 +35,9 @@ class general_opt_method:
     def line_search(self, currentDirection):
         if (self.inexact == True):
             return self.wolfe(self.function, self.gradient)
-        alpha = 1
+        alpha = 0.1
         tol = 1e-2
+
         def phi(alpha):
             return self.function(self.history[-1]+alpha*currentDirection)
         def phidot(alpha):
@@ -53,8 +55,6 @@ class general_opt_method:
                 break
         return alpha    
         
-
-
     def update_hessian(self):
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -68,13 +68,14 @@ class general_opt_method:
         for _ in range(self.max_it):
             self.update_guess()
             
-            print(f"Current guess{self.history[-1]}")
+        #    print(f"Current guess{self.history[-1]}")
             if self.check_convergence():
                 print("Converged")
                 break
-
+            print(f"Iter NUmber: {_}")
+        print(f"Function value = {self.function(self.history[-1])} at point {self.history[-1]}")
         print(f"Number of iterations: {len(self.history)}")
-        print(f"Solution: {self.history[-1]}")
+        # print(f"Solution: {self.history[-1]}")
 
         return self.history[-1]
     
@@ -111,40 +112,8 @@ class general_opt_method:
             else:
                 alphaplus = alphanoll
             
-        print(f"alpha: {alphamin}")
+       # print(f"alpha: {alphamin}")
         return alphamin
-
-    def goldstein(self, f, grad_f, x, alpha=1, c1=0.001, my=30, sigma=0.1, max_iter=100):
-        p = self.direction()
-        
-        alpha_last = 0
-        counter = 0
-        for _ in range(max_iter):
-            counter += 1
-            
-            condition1 = f(x + alpha * p) <= f(x) + c1 * alpha * grad_f(x).dot(p)
-            #condition1 = f(x + alpha * p)
-            #if condition1:
-            #    print(f"first cond linesearch, iter: {counter}, alpha: {alpha}")
-            #    return alpha
-
-            condition2 = grad_f(x + alpha * p).dot(p) >= sigma * grad_f(x).dot(p)
-            #condition2 = grad_f(x + alpha * p).dot(p) >= sigma * grad_f(x).dot(p)
-            #if condition2:
-            #    print(f"second cond linesearch, iter: {counter}, alpha: {alpha}")
-            #    return alpha
-            
-            if 2*alpha - alpha_last >= my:
-                print(f"returning max alpha, iter: {counter}")
-                return my
-
-            tmp_alpha = alpha
-            alpha = 2*alpha - alpha_last
-            alpha_last = tmp_alpha
-
-        print(f"max_iter reached in linesearch")    
-        return alpha
-
 
 class classicNewt(general_opt_method,):
     def __init__(self, problem, initial_guess, tol, max_it=1000, inexact = False):
@@ -199,10 +168,10 @@ class classicNewt(general_opt_method,):
         def phidot(alpha):
             return np.matmul(self.gradient(self.history[-1]+alpha*currentDirection).T,currentDirection)
         def phi_bis(alpha):
-            epsilon = 1e-2
+            epsilon = 1.4e-8
             return (phidot(alpha + epsilon) - phidot(alpha - epsilon))/(2*epsilon)
        
-        max_it = 100
+        max_it = 10
         for i in range(max_it):
             # Update alpha using Newton method
             alpha -= phidot(alpha) / phi_bis(alpha)
@@ -219,14 +188,14 @@ class goodBroyden(general_opt_method):
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        print(f"delta = {delta}, gamma = {gamma}")
+      #  print(f"delta = {delta}, gamma = {gamma}")
         a = np.inner(np.matmul(delta.T, self.H), gamma)
         b1 = np.add(delta, -1*np.matmul(self.H, gamma))
         b = (1/a)*np.outer(b1, delta.T)
-        print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
-        print(f"Dim b1 = {b1.shape}")
+      #  print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
+      #  print(f"Dim b1 = {b1.shape}")
         self.H = np.add(self.H,np.matmul(b, self.H)).T
-        print(f"H = {self.H}")
+      #  print(f"H = {self.H}")
         
 class badBroyden(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=500, inexact = False):
@@ -235,14 +204,14 @@ class badBroyden(general_opt_method):
     def update_hessian(self, epsilon=1):
         delta = np.add(self.history[-1].T, -self.history[-2].T)
         gamma = np.add(self.gradient(self.history[-1]).T, -self.gradient(self.history[-2]).T)
-        print(f"delta = {delta}, gamma = {gamma}")
+      #  print(f"delta = {delta}, gamma = {gamma}")
         a = np.inner(gamma.T, gamma)
         b1 = np.add(delta, -1*np.matmul(self.H, gamma))
         b = (1/a)*np.outer(b1, gamma.T)
-        print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
-        print(f"Dim b1 = {b1.shape}")
+      #  print(f"Dim: Delta = {delta.shape}, Gamma = {gamma.shape}, dim a = {a.shape}, dim b = {b.shape} a = {a}, b = {b}, H = {self.H.shape}")
+      #  print(f"Dim b1 = {b1.shape}")
         self.H = np.add(self.H, b).T
-        print(f"H = {self.H}")
+     #   print(f"H = {self.H}")
 
 class symmetricBroyden(general_opt_method):
     def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
@@ -270,7 +239,7 @@ class DFP(general_opt_method):
         self.H = np.add(self.H, np.add(a, -b4/b3)).T
 
 class BFGS(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=50, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -285,3 +254,12 @@ class BFGS(general_opt_method):
         b3 = np.add(b1, b2)
         b = b3 / np.inner(delta.T, gamma)
         self.H = np.add(self.H, np.add(a, -b)).T
+
+        c1 = np.outer(gamma, gamma.T)/np.inner(gamma.T, delta)
+        d1 = np.outer(np.matmul(self.G, delta), np.matmul(delta.T, self.G))
+        d2 = np.inner(delta.T, np.matmul(self.G, delta))
+        self.G = self.G + c1 - d1/d2
+
+        HReal = np.linalg.inv(self.G)
+
+        print(f"Norm of Approx and 'Real' H: {np.linalg.norm(self.H - HReal)}")

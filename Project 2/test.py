@@ -3,11 +3,9 @@ import opt_method
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 def f1(x):
     #return (x[0]-3)**2 + x[1]**2
     return 100*(x[1] - x[0]**2)**2 + (1 - x[0])**2
-
 
 def gf1(x):
   #  grad = 2*x[0] + 2*x[1]
@@ -59,3 +57,10 @@ plt.colorbar(contour, label='Z-values')
 
 # Show the plot
 plt.show()
+
+# Chebyquad
+import chebyquad_problem as ch
+chebyproblem = opt_problem(ch.chebyquad, ch.gradchebyquad)
+
+solver2 = opt_method.DFP(chebyproblem, [0.5,0.5,0.5,0.5], 1e-4, inexact = True)
+solver2.optimize()
