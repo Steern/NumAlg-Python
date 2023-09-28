@@ -2,7 +2,7 @@ import numpy as np
 import opt_problem
 
 class general_opt_method:
-    def __init__(self, problem, initial_guess, tol, max_it=1000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         self.problem = problem
         self.function = problem.function
         self.gradient = problem.gradient
@@ -38,8 +38,6 @@ class general_opt_method:
         alpha = 0.1
         tol = 1e-2
 
-        def phi(alpha):
-            return self.function(self.history[-1]+alpha*currentDirection)
         def phidot(alpha):
             return np.matmul(self.gradient(self.history[-1]+alpha*currentDirection).T,currentDirection)
         def phi_bis(alpha):
@@ -68,7 +66,6 @@ class general_opt_method:
         for _ in range(self.max_it):
             self.update_guess()
             
-        #    print(f"Current guess{self.history[-1]}")
             if self.check_convergence():
                 print("Converged")
                 break
@@ -112,11 +109,10 @@ class general_opt_method:
             else:
                 alphaplus = alphanoll
             
-       # print(f"alpha: {alphamin}")
         return alphamin
 
 class classicNewt(general_opt_method,):
-    def __init__(self, problem, initial_guess, tol, max_it=1000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -142,47 +138,16 @@ class classicNewt(general_opt_method,):
 
                 x[j] += 2*epsilon
                 g4 = self.gradient(x)[i]
-
-                #print(f"X values after mod: {x}")
-                
-                #print(f"g1: {g1}, g2: {g2}, g3: {g3}, g4: {g4}")
                 
                 G[i, j] = (g1 - g2 - g3 + g4) / (4 * epsilon)
         
-        #print(f"G before symmetrized: {G}")
         G = 0.5*(G + G.T) # symmetrized
-        #print(f"Symmetrized G: {G}")
-
         # Invert G
         self.H = np.linalg.inv(G)
-        #print(f"Updated H: {self.H}")
-
-    def line_search(self, currentDirection):
-        if self.inexact:
-            return self.wolfe(self.function, self.gradient)
-        
-        alpha = 1
-        tol = 1e-2
-        def phi(alpha):
-            return self.function(self.history[-1]+alpha*currentDirection)
-        def phidot(alpha):
-            return np.matmul(self.gradient(self.history[-1]+alpha*currentDirection).T,currentDirection)
-        def phi_bis(alpha):
-            epsilon = 1.4e-8
-            return (phidot(alpha + epsilon) - phidot(alpha - epsilon))/(2*epsilon)
-       
-        max_it = 10
-        for i in range(max_it):
-            # Update alpha using Newton method
-            alpha -= phidot(alpha) / phi_bis(alpha)
-            # Check for convergence
-            if (phidot(alpha) < tol):
-                break
-        return alpha    
-
+        #print(f"Updated H: {self.H}") 
 
 class goodBroyden(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -198,7 +163,7 @@ class goodBroyden(general_opt_method):
       #  print(f"H = {self.H}")
         
 class badBroyden(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=500, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -214,7 +179,7 @@ class badBroyden(general_opt_method):
      #   print(f"H = {self.H}")
 
 class symmetricBroyden(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -225,7 +190,7 @@ class symmetricBroyden(general_opt_method):
         self.H = np.add(self.H, a*np.outer(u, u.T)).T
 
 class DFP(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=100000, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False):
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -239,7 +204,8 @@ class DFP(general_opt_method):
         self.H = np.add(self.H, np.add(a, -b4/b3)).T
 
 class BFGS(general_opt_method):
-    def __init__(self, problem, initial_guess, tol, max_it=50, inexact = False):
+    def __init__(self, problem, initial_guess, tol, max_it=100, inexact = False, compHessInv = False):
+        self.compHessInv = compHessInv
         super().__init__(problem, initial_guess, tol, max_it, inexact)
 
     def update_hessian(self, epsilon=1):
@@ -255,11 +221,13 @@ class BFGS(general_opt_method):
         b = b3 / np.inner(delta.T, gamma)
         self.H = np.add(self.H, np.add(a, -b)).T
 
-        c1 = np.outer(gamma, gamma.T)/np.inner(gamma.T, delta)
-        d1 = np.outer(np.matmul(self.G, delta), np.matmul(delta.T, self.G))
-        d2 = np.inner(delta.T, np.matmul(self.G, delta))
-        self.G = self.G + c1 - d1/d2
+        if (self.compHessInv == True):
+            c1 = np.outer(gamma, gamma.T)/np.inner(gamma.T, delta)
+            d1 = np.outer(np.matmul(self.G, delta), np.matmul(delta.T, self.G))
+            d2 = np.inner(delta.T, np.matmul(self.G, delta))
+            self.G = self.G + c1 - d1/d2
 
-        HReal = np.linalg.inv(self.G)
+            HReal = np.linalg.inv(self.G)
 
-        print(f"Norm of Approx and 'Real' H: {np.linalg.norm(self.H - HReal)}")
+            print(f"Norm of Approx and 'Real' H: {np.linalg.norm(self.H - HReal)}")
+        

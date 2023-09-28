@@ -21,7 +21,7 @@ prob1 = opt_problem.opt_problem(f1, gf1)
 # solver = opt_method.classicNewt(prob1, [-10,3], 1e-6, inexact = True)
 # solver.optimize()
 
-solver = opt_method.DFP(prob1, [3,-10], 1e-4, inexact = True)
+solver = opt_method.BFGS(prob1, [2,5], 1e-4, inexact = True)
 solver.optimize()
 
 
@@ -58,9 +58,3 @@ plt.colorbar(contour, label='Z-values')
 # Show the plot
 plt.show()
 
-# Chebyquad
-import chebyquad_problem as ch
-chebyproblem = opt_problem(ch.chebyquad, ch.gradchebyquad)
-
-solver2 = opt_method.DFP(chebyproblem, [0.5,0.5,0.5,0.5], 1e-4, inexact = True)
-solver2.optimize()
