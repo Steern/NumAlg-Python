@@ -26,8 +26,8 @@ solver.optimize()
 
 
 # Create data for the contour plot
-x = np.linspace(-2, 2, 1000)  # X-axis values
-y = np.linspace(-2, 2, 1000)  # Y-axis values
+x = np.linspace(-3, 10, 1000)  # X-axis values
+y = np.linspace(-2, 48, 1000)  # Y-axis values
 X, Y = np.meshgrid(x, y)     # Create a grid of X and Y values
 Z = 100*(Y - X**2)**2 + (1 - X)**2     # Z-values (example function, you can replace it with your own)
 

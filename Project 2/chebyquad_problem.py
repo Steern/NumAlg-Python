@@ -80,6 +80,6 @@ def gradchebyquad(x):
     return dot(chq[1:].reshape((1, -1)), UM).reshape((-1, ))
     
 if __name__ == '__main__':
-    x=linspace(0,1,13)
+    x=linspace(0,1,11)
     xmin= so.fmin_bfgs(chebyquad,x,gradchebyquad)  # should converge after 18 iterations  
     print(xmin)
