@@ -18,8 +18,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
     rank = comm.Get_rank()
     if rank == 0:
         # Room 2
-        data_1 = np.ones(int(1/delta_x), dtype='d')*T0
-        data_2 = np.ones(int(1/delta_x), dtype='d')*T0
+        data_1 = np.ones(int(1/delta_x)-2, dtype='d')*T0
+        data_2 = np.ones(int(1/delta_x)-2, dtype='d')*T0
         its = 0
         
         y_len = int(2/delta_x)
@@ -36,23 +36,27 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
 
             A = matrix_A(int(1/delta_x) ,int(2/delta_x))
             top_index = list(range(x_len))
-            left_index = [i*x_len for i in range(y_len)]
-            right_index = [i*x_len-1 for i in range(1,y_len+1)]
+            left_index = list(edges(x_len,y_len)[3])
+            right_index = list(edges(x_len,y_len)[1])
             bottom_index = list(range((y_len-1)*x_len, y_len*x_len))
             dirichlet_index = top_index + left_index + right_index + bottom_index
             A_mod = A.copy()
             for index in dirichlet_index:
                 A_mod[:,index] = 0
-            
+                A_mod[index,index] = -1
+            A_mod = csr_matrix(A_mod)
+
             half_y = int(y_len/2)
             top_left = left_index[:half_y]
-            bot_left = left_index[half_y:]
-            top_right = right_index[:half_y]
-            bot_right = right_index[half_y:]
-            
+            #bot_left = left_index[half_y-1:]
+            bot_left = edges(x_len,x_len)[3] + int(x_len*half_y)
+          #  top_right = right_index[:half_y-1]
+            top_right = edges(x_len,x_len)[1]
+            bot_right = right_index[half_y-2:]
+            print(right_index)
+            print(top_right)
+
             const_temp = np.zeros(y_len*x_len)
-            print(top_left)
-            print(const_temp)
             const_temp[top_left] = uNorm
             const_temp[bot_right] = uNorm
             const_temp[bot_left] = data_1
@@ -60,21 +64,21 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             const_temp[bottom_index] = uWF
             const_temp[top_index] = uH
 
-            print(A_mod)
-            print(-A@const_temp)
             u_new = spsolve(A_mod,-A@const_temp) # solves the system
             print(u_new)
-            u_new[top_left] = uNorm 
-            u_new[bot_right] = uNorm                          # change/overwrite the boundaries that we know the value of
-            u_new[bot_left] = data_1
-            u_new[top_right] = data_2 
-            u_new[bottom_index] = uWF
-            u_new[top_index] = uH
             
-            dU = A*u_new
             
-            dU1 = dU
-            dU2 = dU
+            dU1 = -(u_new[bot_left] - u_new[bot_left + 1])/delta_x
+            dU2 = (u_new[top_right] - u_new[top_right - 1])/delta_x
+
+            u2 = u_new
+            # u1 = np.ones(36)*15
+            # u3 = np.ones(36)*15
+
+            # plot_u2 = u2.reshape(   (y_len, x_len)  )
+            # plot_u1 = u1.reshape(   (x_len, x_len)  ) 
+            # plot_u3 = u3.reshape(   (x_len, x_len)  )
+            # plot(plot_u1, plot_u2, plot_u3)
             
             # Extract values from indices in u_new which corresponds to walls Gamma 1 and Gamma 1, to be
             # stored in U1 and U2 and sent away to other threads
@@ -88,16 +92,19 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             u_new = relax_w*u_new + (1-relax_w)*u1
 
             u1 = u_new
-
             # wait to receive from room 1
-            data_1 = np.empty(x_len, dtype='d')
-            comm.Recv(data_1, source=0, tag=12)
+            data_1 = np.empty(x_len**2, dtype='d')
+            comm.Recv(data_1, source=1, tag=12)
             
             # wait to receive from room 3
-            data_2 = np.empty(x_len, dtype='d')
-            comm.Recv(data_2, source=0, tag=13)
+            data_2 = np.empty(x_len**2, dtype='d')
+            comm.Recv(data_2, source=2, tag=32)
 
             its = its + 1
+            if its < iterations:
+                #print(edges(x_len,x_len)[3])
+                data_1 = data_1[(edges(x_len,x_len)[1])]
+                data_2 = data_2[edges(x_len,x_len)[3]]
 
         # reshape data and then plot it
         u2 = u_new
@@ -109,51 +116,54 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         plot_u3 = u3.reshape(   (x_len, x_len)  )
         plot(plot_u1, plot_u2, plot_u3)
 
+       
+
     if rank == 1:
         # Room 1
         u1 = np.ones(int(1/delta_x**2), dtype='d')
         while True:
-            data = np.empty(int(1/delta_x), dtype='d')
+           
+            data = np.empty(int(1/delta_x)-2, dtype='d')
             comm.Recv(data, source=0, tag=21)
             # Edit matrix to adjust for bounderies 
             x_len = int(1/delta_x)
             y_len = int(1/delta_x)
 
-            A = matrix_A(int(x_len),int(y_len))
+            A = matrix_A(int(x_len),int(x_len))
 
             top_index = list(range(x_len))
-            left_index = list(edges(x_len,y_len)[3])
-            right_index = list(edges(x_len,y_len)[1])
+            left_index = list(edges(x_len,x_len)[3])
+            right_index = list(edges(x_len,x_len)[1])
             bottom_index = list(range((y_len-1)*x_len, y_len*x_len))
             dirichlet_index = top_index + left_index + bottom_index
             neumann_index = right_index
            
-            A_mod = A
+            A_mod = A.copy()
 
             for index in dirichlet_index:
                 A_mod[:,index] = 0
+                A_mod[index,index]=-1
 
             for index in neumann_index:
+                A_mod[index,:]= 0
                 A_mod[index,index] = -3
                 A_mod[index,index+x_len] = 1
                 A_mod[index, index-x_len] = 1
                 A_mod[index, index-1] = 1
-                A_mod[index,index-1] = 0
 
-            const_temp = np.zeros(x_len*y_len)
+            const_temp = np.zeros(x_len*x_len)
             const_temp[left_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
            
-            neumann_vector = np.zeros(x_len*y_len)
-            neumann_vector[right_index] = data[right_index]/delta_x
+            neumann_vector = np.zeros(x_len*x_len)
+            neumann_vector[neumann_index] = data
 
             # Solve
-            u_new = np.linalg.solve(A_mod,-A.multiply(const_temp) + neumann_vector)
-
+            u_new = spsolve(A_mod,-A@(const_temp) - neumann_vector)
             # send to room 2
-            dU2 = 0
+            dU2 = u_new#[right_index]
             comm.Send([dU2, MPI.DOUBLE], dest = 0, tag = 12)
-
+            
             u_new = relax_w*u_new + (1-relax_w)*u1
 
             u1 = u_new
@@ -164,43 +174,43 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         x_len = int(1/delta_x)
         y_len = int(1/delta_x)
         while True:
-            data = np.empty(x_len, dtype='d')
+            print("hej")
+            data = np.empty(x_len-2, dtype='d')
             comm.Recv(data, source=0, tag = 23 )
             
             # Edit matrix to adjust for bounderies 
-            A = matrix_A(x_len,y_len)
+            A = matrix_A(x_len,x_len)
             top_index = list(range(x_len))
-            left_index = list(edges(x_len,y_len)[3])
-            right_index = [i*x_len-1 for i in range(1,y_len+1)]
-            bottom_index = list(range((y_len-1)*x_len, y_len*x_len))
+            left_index = list(edges(x_len,x_len)[3])
+            right_index = list(edges(x_len,x_len)[1])
+            bottom_index = list(range((x_len-1)*x_len, x_len*x_len))
             dirichlet_index = top_index + right_index + bottom_index
             neumann_index = left_index
 
-            A_mod = A
+            A_mod = A.copy()
 
             for index in dirichlet_index:
                 A_mod[:,index] = 0
+                A_mod[index,index] = -1
 
             for index in neumann_index:
                 A_mod[index,index] = -3
                 A_mod[index,index+x_len] = 1
                 A_mod[index, index-x_len] = 1
                 A_mod[index, index+1] = 1
-                A_mod[index, index-1] = 0
 
-            const_temp = np.zeros(x_len*y_len)
-            const_temp[left_index] = uH
+            const_temp = np.zeros(x_len*x_len)
+            const_temp[right_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
            
-            neumann_vector = np.zeros(x_len*y_len)
-            neumann_vector[left_index] = data[left_index]/delta_x
+            neumann_vector = np.zeros(x_len*x_len)
+            neumann_vector[neumann_index] = data
             # Solve
-            u_new = np.linalg.solve(A_mod,-A.multiply(const_temp) + neumann_vector)
-
+            u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
+            print(u_new)
             # send to room 2
-            dU1 = 0
+            dU1 = u_new#[left_index]
             comm.Send([dU1, MPI.DOUBLE], dest = 0, tag = 32)
-
             u_new = relax_w*u_new + (1-relax_w)*u1
 
             u1 = u_new
@@ -225,8 +235,8 @@ def matrix_A(N_x, N_y):
     values = []
     
     for k in inner_index:
-        i=np.floor(k/N_x)
-        j=np.remainder(k,N_x)
+        j=np.floor(k/N_x)
+        i=np.remainder(k,N_x)
         rowind=np.append(rowind,[k,k,k,k,k])
         colind=np.append(colind,[j*N_x+i,(j+1)*N_x+i,(j-1)*N_x+i,j*N_x+i+1,j*N_x+i-1])
         values=np.append(values,[-4,1,1,1,1])
@@ -269,9 +279,9 @@ def main():
     uNorm = 15
     uH = 40
     uWF = 5
-    delta_x = 1/3
+    delta_x = 1/6
     relax_w = 0.8
-    iterations = 10
+    iterations = 2
     
     solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations)
 
