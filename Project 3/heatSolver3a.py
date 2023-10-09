@@ -3,6 +3,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import spsolve
 from plot import plot
+from plot3a import plot3a
 
 def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
     # Start threads
@@ -20,6 +21,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         # Room 2
         data_1 = np.ones(int(1/delta_x)-2, dtype='d')*T0
         data_2 = np.ones(int(1/delta_x)-2, dtype='d')*T0
+        data_3 = np.ones(int(1/delta_x/2)-2, dtype='d')*T0
         its = 0
         
         y_len = int(2/delta_x)
@@ -30,10 +32,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         while (its < iterations):
             # Edit matrix to adjust for bounderies 
 
-            # Solve
-            # Wait to receive Neumann conditions (dU values) for wall Gamma 1 from room 2
-
             A = matrix_A(int(1/delta_x) ,int(2/delta_x))
+        
             top_index, left_index, right_index, bottom_index = get_boundary_indices(x_len, y_len)
             dirichlet_index = top_index + left_index + right_index + bottom_index
             
@@ -49,10 +49,14 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             bot_left = edges(x_len,x_len)[3] + int(x_len*half_y)
             top_right = edges(x_len,x_len)[1]
             bot_right = right_index[half_y-2:]
+            
+            small_room = int(y_len/4)
+            top_bot_right = edges(x_len,small_room)[1] + int(x_len*half_y)
+            bot_bot_right = bot_right[small_room-2:]
 
             const_temp = np.zeros(y_len*x_len)
-            const_temp[top_left] = uNorm
-            const_temp[bot_right] = uNorm
+            const_temp[top_left + bot_bot_right] = uNorm
+            const_temp[top_bot_right] = data_3
             const_temp[bot_left] = data_1
             const_temp[top_right] = data_2 
             const_temp[bottom_index] = uWF
@@ -60,20 +64,20 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
 
             u_new = spsolve(A_mod,-A@const_temp) # solves the system
            
-            
             dU1 = -(u_new[bot_left] - u_new[bot_left + 1])/delta_x
             dU2 = -(u_new[top_right] - u_new[top_right - 1])/delta_x
+            dU3 = -(u_new[top_bot_right] - u_new[top_bot_right - 1])/delta_x
           
             u2 = u_new
-            
-            # Extract values from indices in u_new which corresponds to walls Gamma 1 and Gamma 1, to be
-            # stored in U1 and U2 and sent away to other threads
 
             # send to room 1
             comm.Send([dU1, MPI.DOUBLE], dest = 1, tag = 21)
             
             # send to room 3
             comm.Send([dU2, MPI.DOUBLE], dest = 2, tag = 23)
+
+            # send to room 4
+            comm.Send([dU3, MPI.DOUBLE], dest = 3, tag = 24)
 
             u_new = relax_w*u_new + (1-relax_w)*u1
 
@@ -86,12 +90,16 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             data_2 = np.empty(x_len**2, dtype='d')
             comm.Recv(data_2, source=2, tag=32)
 
+            data_3 = np.empty(int((x_len/2))**2, dtype = 'd')
+            comm.Recv(data_3, source=3, tag = 42)
+
             its = its + 1
             if its < iterations:
                 data_1 = data_1[(edges(x_len,x_len)[1])]
                 data_2 = data_2[edges(x_len,x_len)[3]]
+                data_3 = data_3[edges(int(x_len/2), int(x_len/2))[3]]
 
-        plot(data_1, u_new, data_2, x_len, y_len)
+        plot3a(data_1, u_new, data_2, data_3, x_len, y_len)
 
     if rank == 1:
         # Room 1
@@ -100,6 +108,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
            
             data = np.empty(int(1/delta_x)-2, dtype='d')
             comm.Recv(data, source=0, tag=21)
+
             # Edit matrix to adjust for bounderies 
             x_len = int(1/delta_x)
             y_len = int(1/delta_x)
@@ -112,26 +121,23 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_index = right_index
            
             A_mod = A.copy()
-
             A_mod = set_Neumann(neumann_index, A_mod, x_len, True)
-
             A_mod = set_Dirichlet(dirichlet_index, A_mod)
 
             A = A/(delta_x**2)
             A_mod = A_mod/(delta_x**2)
-            
             const_temp = np.zeros(x_len*x_len)
             const_temp[left_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
 
-           
             neumann_vector = np.zeros(x_len*x_len)
             neumann_vector[neumann_index] = data/delta_x
 
             # Solve
             u_new = spsolve(A_mod,-A@(const_temp) - neumann_vector)
+
             # send to room 2
-            dU2 = u_new#[right_index]
+            dU2 = u_new
             comm.Send([dU2, MPI.DOUBLE], dest = 0, tag = 12)
             
             u_new = relax_w*u_new + (1-relax_w)*u1
@@ -150,16 +156,12 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             
             # Edit matrix to adjust for bounderies 
             A = matrix_A(x_len,x_len)
-
             top_index, left_index, right_index, bottom_index = get_boundary_indices(x_len, y_len)
-
             dirichlet_index = top_index + right_index + bottom_index
             neumann_index = left_index
-
+            
             A_mod = A.copy()
-
             A_mod = set_Neumann(neumann_index, A_mod, x_len, False)
-
             A_mod = set_Dirichlet(dirichlet_index, A_mod)
 
             A = A/(delta_x**2)
@@ -171,19 +173,56 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
            
             neumann_vector = np.zeros(x_len*x_len)
             neumann_vector[neumann_index] = data/delta_x
+
             # Solve
             u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
-
-
+            
             # send to room 2
-            dU1 = u_new#[left_index]
+            dU1 = u_new
             comm.Send([dU1, MPI.DOUBLE], dest = 0, tag = 32)
             u_new = relax_w*u_new + (1-relax_w)*u1
 
             u1 = u_new
     
     if rank == 3:
-        pass
+        # Room 4
+        u1 = np.ones((int(1/delta_x/2)**2), dtype='d')
+        x_len = int(1/delta_x/2)
+        y_len = int(1/delta_x/2)
+
+        while True:
+            data = np.empty(x_len-2, dtype='d')
+            comm.Recv(data, source=0, tag = 24)
+
+            # Edit matrix to adjust for bounderies 
+            A = matrix_A(x_len,x_len)
+            top_index, left_index, right_index, bottom_index = get_boundary_indices(x_len, y_len)
+            dirichlet_index = top_index + right_index + bottom_index
+            neumann_index = left_index
+
+            A_mod = A.copy()
+            A_mod = set_Neumann(neumann_index, A_mod, x_len, False)
+            A_mod = set_Dirichlet(dirichlet_index, A_mod)
+
+            A = A/(delta_x**2)
+            A_mod = A_mod/(delta_x**2)
+
+            const_temp = np.zeros(x_len*x_len)
+            const_temp[bottom_index] = uH
+            const_temp[top_index  + right_index] = uNorm
+           
+            neumann_vector = np.zeros(x_len*x_len)
+            neumann_vector[neumann_index] = data/delta_x
+
+            # Solve
+            u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
+            
+            # send to room 2
+            dU1 = u_new
+            comm.Send([dU1, MPI.DOUBLE], dest = 0, tag = 42)
+            u_new = relax_w*u_new + (1-relax_w)*u1
+
+            u1 = u_new
 
 def get_boundary_indices(x_len, y_len):
     top_index = list(range(x_len))
@@ -192,7 +231,7 @@ def get_boundary_indices(x_len, y_len):
     bottom_index = list(range((y_len-1) * x_len, y_len * x_len))
 
     return top_index, left_index, right_index, bottom_index
-        
+
 def set_Dirichlet(dirichlet_index, A_mod):
     for index in dirichlet_index:
         A_mod[:,index] = 0
