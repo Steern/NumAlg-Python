@@ -65,9 +65,6 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             dU2 = -(u_new[top_right] - u_new[top_right - 1])/delta_x
           
             u2 = u_new
-            
-            # Extract values from indices in u_new which corresponds to walls Gamma 1 and Gamma 1, to be
-            # stored in U1 and U2 and sent away to other threads
 
             # send to room 1
             comm.Send([dU1, MPI.DOUBLE], dest = 1, tag = 21)
@@ -95,7 +92,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
 
     if rank == 1:
         # Room 1
-        u1 = np.ones(int(1/delta_x)**2, dtype='d')
+        u1 = np.ones(int(1/delta_x)**2, dtype='d')*T0
         while True:
            
             data = np.empty(int(1/delta_x)-2, dtype='d')
@@ -111,10 +108,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             dirichlet_index = top_index + left_index + bottom_index
             neumann_index = right_index
            
+            A = set_Neumann(neumann_index, A, x_len, True)
             A_mod = A.copy()
-
-            A_mod = set_Neumann(neumann_index, A_mod, x_len, True)
-
             A_mod = set_Dirichlet(dirichlet_index, A_mod)
 
             A = A/(delta_x**2)
@@ -129,9 +124,11 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_vector[neumann_index] = data/delta_x
 
             # Solve
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@(const_temp) - neumann_vector)
             # send to room 2
-            dU2 = u_new#[right_index]
+            dU2 = u_new
             comm.Send([dU2, MPI.DOUBLE], dest = 0, tag = 12)
             
             u_new = relax_w*u_new + (1-relax_w)*u1
@@ -140,7 +137,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
     
     if rank == 2:
         # Room 3
-        u1 = np.ones(int(1/delta_x)**2, dtype='d')
+        u1 = np.ones(int(1/delta_x)**2, dtype='d')*T0
         x_len = int(1/delta_x)
         y_len = int(1/delta_x)
         while True:
@@ -156,10 +153,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             dirichlet_index = top_index + right_index + bottom_index
             neumann_index = left_index
 
+            A = set_Neumann(neumann_index, A, x_len, False)
             A_mod = A.copy()
-
-            A_mod = set_Neumann(neumann_index, A_mod, x_len, False)
-
             A_mod = set_Dirichlet(dirichlet_index, A_mod)
 
             A = A/(delta_x**2)
@@ -172,11 +167,13 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_vector = np.zeros(x_len*x_len)
             neumann_vector[neumann_index] = data/delta_x
             # Solve
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
 
 
             # send to room 2
-            dU1 = u_new#[left_index]
+            dU1 = u_new
             comm.Send([dU1, MPI.DOUBLE], dest = 0, tag = 32)
             u_new = relax_w*u_new + (1-relax_w)*u1
 
@@ -242,16 +239,17 @@ def matrix_A(N_x, N_y):
         colind = np.append(colind,k)
         values = np.append(values,1)
         
-    return csr_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))
+    A = csr_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))
+    return A.tolil()
 
 def main():
     T0 = 15
     uNorm = 15
     uH = 40
     uWF = 5
-    delta_x = 1/20
+    delta_x = 1/50
     relax_w = 0.8
-    iterations = 10
+    iterations = 30
     
     solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations)
 
