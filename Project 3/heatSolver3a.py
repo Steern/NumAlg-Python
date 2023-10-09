@@ -1,6 +1,6 @@
 from mpi4py import MPI
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, lil_matrix
 from scipy.sparse.linalg import spsolve
 from plot import plot
 from plot3a import plot3a
@@ -62,6 +62,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             const_temp[bottom_index] = uWF
             const_temp[top_index] = uH
 
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@const_temp) # solves the system
            
             dU1 = -(u_new[bot_left] - u_new[bot_left + 1])/delta_x
@@ -134,6 +136,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_vector[neumann_index] = data/delta_x
 
             # Solve
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@(const_temp) - neumann_vector)
 
             # send to room 2
@@ -168,6 +172,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             A_mod = A_mod/(delta_x**2)
 
             const_temp = np.zeros(x_len*x_len)
+            #const_temp = csr_matrix((0, ([0], [1])), shape=(1, x_len*y_len), dtype=np. float64)
             const_temp[right_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
            
@@ -175,6 +180,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_vector[neumann_index] = data/delta_x
 
             # Solve
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
             
             # send to room 2
@@ -215,6 +222,8 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             neumann_vector[neumann_index] = data/delta_x
 
             # Solve
+            A_mod = A_mod.tocsr()
+            A = A.tocsr()
             u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
             
             # send to room 2
@@ -280,8 +289,11 @@ def matrix_A(N_x, N_y):
         rowind = np.append(rowind,k)
         colind = np.append(colind,k)
         values = np.append(values,1)
-        
-    return csr_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))
+    
+    # borde kunna göra såhär direkt?
+    # return lil_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))        
+    matrix = csr_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))
+    return matrix.tolil()
 
 def main():
     T0 = 15
