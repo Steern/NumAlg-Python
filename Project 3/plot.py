@@ -13,17 +13,19 @@ def plot(u1, u2, u3):
     total_temp = np.zeros((room_length * 2, room_length * 3))
 
     # Assign each room's temperature to the appropriate slice of the total matrix:
-    total_temp[:room_length, :room_length] = u1   # Bottom left
+    # total_temp[y, x]
+    total_temp[room_length:, :room_length] = u1  # Bottom left
     total_temp[:, room_length:room_length*2] = u2   # Middle
-    total_temp[room_length:, room_length*2:] = u3   # Top right
+    total_temp[:room_length, room_length*2:] = u3   # Top right
 
     # this removes zeros entries that are outside any room
     masked_temp = np.ma.masked_where(total_temp == 0, total_temp)
 
     # Visualize
-    plt.imshow(masked_temp, cmap='hot', origin='lower', vmin=0, vmax=100)
+    plt.imshow(masked_temp, cmap='hot', origin='lower', vmin=0, vmax=50)
     plt.colorbar(label='Temperature')
     plt.title('Temperature Distribution in Rooms')
     plt.xlabel('X position')
     plt.ylabel('Y position')
+    plt.gca().invert_yaxis()
     plt.show()

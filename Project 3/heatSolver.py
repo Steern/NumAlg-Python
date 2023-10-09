@@ -40,21 +40,19 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             right_index = list(edges(x_len,y_len)[1])
             bottom_index = list(range((y_len-1)*x_len, y_len*x_len))
             dirichlet_index = top_index + left_index + right_index + bottom_index
+            
             A_mod = A.copy()
             for index in dirichlet_index:
                 A_mod[:,index] = 0
                 A_mod[index,index] = -1
-            A_mod = csr_matrix(A_mod)
+            A_mod = csr_matrix(A_mod/(delta_x**2))
+            A = A/(delta_x**2)
 
             half_y = int(y_len/2)
             top_left = left_index[:half_y]
-            #bot_left = left_index[half_y-1:]
             bot_left = edges(x_len,x_len)[3] + int(x_len*half_y)
-          #  top_right = right_index[:half_y-1]
             top_right = edges(x_len,x_len)[1]
             bot_right = right_index[half_y-2:]
-            print(right_index)
-            print(top_right)
 
             const_temp = np.zeros(y_len*x_len)
             const_temp[top_left] = uNorm
@@ -65,20 +63,12 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
             const_temp[top_index] = uH
 
             u_new = spsolve(A_mod,-A@const_temp) # solves the system
-            print(u_new)
-            
+           
             
             dU1 = -(u_new[bot_left] - u_new[bot_left + 1])/delta_x
-            dU2 = (u_new[top_right] - u_new[top_right - 1])/delta_x
-
+            dU2 = -(u_new[top_right] - u_new[top_right - 1])/delta_x
+          
             u2 = u_new
-            # u1 = np.ones(36)*15
-            # u3 = np.ones(36)*15
-
-            # plot_u2 = u2.reshape(   (y_len, x_len)  )
-            # plot_u1 = u1.reshape(   (x_len, x_len)  ) 
-            # plot_u3 = u3.reshape(   (x_len, x_len)  )
-            # plot(plot_u1, plot_u2, plot_u3)
             
             # Extract values from indices in u_new which corresponds to walls Gamma 1 and Gamma 1, to be
             # stored in U1 and U2 and sent away to other threads
@@ -102,7 +92,6 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
 
             its = its + 1
             if its < iterations:
-                #print(edges(x_len,x_len)[3])
                 data_1 = data_1[(edges(x_len,x_len)[1])]
                 data_2 = data_2[edges(x_len,x_len)[3]]
 
@@ -116,11 +105,9 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         plot_u3 = u3.reshape(   (x_len, x_len)  )
         plot(plot_u1, plot_u2, plot_u3)
 
-       
-
     if rank == 1:
         # Room 1
-        u1 = np.ones(int(1/delta_x**2), dtype='d')
+        u1 = np.ones(int(1/delta_x)**2, dtype='d')
         while True:
            
             data = np.empty(int(1/delta_x)-2, dtype='d')
@@ -140,10 +127,6 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
            
             A_mod = A.copy()
 
-            for index in dirichlet_index:
-                A_mod[:,index] = 0
-                A_mod[index,index]=-1
-
             for index in neumann_index:
                 A_mod[index,:]= 0
                 A_mod[index,index] = -3
@@ -151,12 +134,19 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
                 A_mod[index, index-x_len] = 1
                 A_mod[index, index-1] = 1
 
+            for index in dirichlet_index:
+                A_mod[:,index] = 0
+                A_mod[index,index]=-1
+
+            A = A/(delta_x**2)
+            A_mod = A_mod/(delta_x**2)
             const_temp = np.zeros(x_len*x_len)
             const_temp[left_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
+
            
             neumann_vector = np.zeros(x_len*x_len)
-            neumann_vector[neumann_index] = data
+            neumann_vector[neumann_index] = data/delta_x
 
             # Solve
             u_new = spsolve(A_mod,-A@(const_temp) - neumann_vector)
@@ -170,11 +160,11 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
     
     if rank == 2:
         # Room 3
-        u1 = np.ones(int(1/delta_x**2), dtype='d')
+        u1 = np.ones(int(1/delta_x)**2, dtype='d')
         x_len = int(1/delta_x)
         y_len = int(1/delta_x)
         while True:
-            print("hej")
+            
             data = np.empty(x_len-2, dtype='d')
             comm.Recv(data, source=0, tag = 23 )
             
@@ -189,31 +179,37 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
 
             A_mod = A.copy()
 
-            for index in dirichlet_index:
-                A_mod[:,index] = 0
-                A_mod[index,index] = -1
-
             for index in neumann_index:
                 A_mod[index,index] = -3
                 A_mod[index,index+x_len] = 1
                 A_mod[index, index-x_len] = 1
                 A_mod[index, index+1] = 1
 
+            for index in dirichlet_index:
+                A_mod[:,index] = 0
+                A_mod[index,index] = -1
+
+            A = A/(delta_x**2)
+            A_mod = A_mod/(delta_x**2)
+
             const_temp = np.zeros(x_len*x_len)
             const_temp[right_index] = uH
             const_temp[top_index  + bottom_index] = uNorm
            
             neumann_vector = np.zeros(x_len*x_len)
-            neumann_vector[neumann_index] = data
+            neumann_vector[neumann_index] = data/delta_x
             # Solve
             u_new = spsolve(A_mod,-A@const_temp - neumann_vector)
-            print(u_new)
+            
             # send to room 2
             dU1 = u_new#[left_index]
             comm.Send([dU1, MPI.DOUBLE], dest = 0, tag = 32)
             u_new = relax_w*u_new + (1-relax_w)*u1
 
             u1 = u_new
+    
+    if rank == 3:
+        pass
 
 def edges(N_x,N_y):
     edge1=np.array(range(N_x))
@@ -226,9 +222,7 @@ def edges(N_x,N_y):
 def inside(N_x,N_y):
     return np.setdiff1d(np.array(range(N_x*N_y-1)),np.concatenate(edges(N_x,N_y)))
     
-
 def matrix_A(N_x, N_y):
-
     inner_index = inside(N_x,N_y)
     rowind = []
     colind = []
@@ -247,41 +241,14 @@ def matrix_A(N_x, N_y):
         
     return csr_matrix((values, (rowind, colind)), shape=(N_x*N_y, N_x*N_y))
 
-
-def oldmatrix_A(size_x, size_y):
-    
-    N = size_x * size_y  # total number of unknowns
-    A = np.zeros((N, N))
-    
-    # Fill the matrix A based on the finite difference discretization
-    # This would also depend on the boundary conditions, which are not handled here
-    
-    for j in range(size_y):
-        for i in range(size_x):
-            idx = j * size_x + i  # map 2D indices to 1D
-
-            A[idx, idx] = -4
-            
-            if i > 0:
-                A[idx, idx-1] = 1
-            if i < size_x-1:
-                A[idx, idx+1] = 1
-            if j > 0:
-                A[idx, idx-size_x] = 1
-            if j < size_y-1:
-                A[idx, idx+size_x] = 1
-    
-    return csr_matrix(A*size_x**2)    
-
-
 def main():
     T0 = 15
     uNorm = 15
     uH = 40
     uWF = 5
-    delta_x = 1/6
+    delta_x = 1/20
     relax_w = 0.8
-    iterations = 2
+    iterations = 10
     
     solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations)
 
