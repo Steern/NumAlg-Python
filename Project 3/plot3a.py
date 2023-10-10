@@ -3,6 +3,14 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
 
+# start the script by initlizing the lists in room 2
+# then for every iterations add the new data to the list,
+# after relaxing
+#u1_list.append(data_1_all)
+#u2_list.append(u_new)
+#u3_list.append(data_2_all)
+#...
+# then call the plot after the iterations are done
 def plotman(u1_list, u2_list, u3_list, u4_list, x_len, y_len):
     fig, ax = plt.subplots()
     
@@ -31,7 +39,7 @@ def plotman(u1_list, u2_list, u3_list, u4_list, x_len, y_len):
         ax.invert_yaxis()
         
     ani = animation.FuncAnimation(fig, update, frames=len(u1_list), repeat=False)
-    ani.save('2frames.mp4', writer='ffmpeg')
+    ani.save('30anddx100frames.mp4', writer='ffmpeg')
     plt.show()
 
 
