@@ -35,6 +35,8 @@ def plotman(u1_list, u2_list, u3_list, u4_list, x_len, y_len):
     plt.show()
 
 
+
+
 def plot3a(u1, u2, u3, u4, x_len, y_len):
     u1 = u1.reshape(   (x_len, x_len)  ) 
     u2 = u2.reshape(   (y_len, x_len)  )
