@@ -22,7 +22,7 @@ def solve(T0, uNorm, uH, uWF, delta_x, relax_w, iterations):
         data_2 = np.ones(int(1/delta_x)-2, dtype='d')*T0
 
         #all temp from other rooms
-        data_1_all = np.ones(int(1/delta_x**2))*T0 
+        data_1_all = np.ones(int(1/delta_x)**2)*T0 
         data_2_all = np.ones(int(1/delta_x)**2)*T0
 
 
@@ -246,7 +246,7 @@ def main():
     uNorm = 15
     uH = 40
     uWF = 5
-    delta_x = 1/50
+    delta_x = 1/6
     relax_w = 0.8
     iterations = 10
     
